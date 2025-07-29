@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <link rel="apple-touch-icon" sizes="180x180" href="icon-192.png" />
+
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Gas Rate Calculator</title>
+  <meta name="theme-color" content="#8a2be2" />
+
+  <link rel="manifest" href="manifest.json" />
+  <link rel="stylesheet" href="style.css" />
+  <script src="https://cdn.jsdelivr.net/npm/fuse.js@6.6.2"></script>
+
+  <style>
+  .green {
+    color: green;
+    font-weight: bold;
+  }
+
+  .red {
+    color: red;
+    font-weight: bold;
+  }
+
+  .gc-wrapper {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    margin: 20px auto;
+    text-align: center;
+  }
+
+  .gc-wrapper input {
+    max-width: 240px;
+    padding: 8px;
+    text-align: center;
+  }
+
+  .gc-label {
+    margin-bottom: 6px;
+    font-weight: bold;
+  }
+
+  /* ✅ Prevent side-to-side scrolling */
+  html, body {
+    overflow-x: hidden;
+  }
+
+
+</style>
+
+
+
+</head>
+
+<body>
+  <!-- 🔐 Login screen -->
+<div id="loginScreen" style="display: none; justify-content: center; align-items: center; flex-direction: column; height: 100vh;">
+  <h2 style="color: #6a0dad;">Gas Rate Login</h2>
+  <input type="text" id="loginUsername" placeholder="Username" style="margin: 10px; padding: 10px; width: 220px;" />
+
+  <input type="password" id="loginPassword" placeholder="Password" style="margin: 10px; padding: 10px; width: 220px;" />
+  <button onclick="login()" style="background: #8a2be2; color: white; padding: 10px 20px; border: none; border-radius: 6px;">Login</button>
+  <div id="loginError" style="color: red; margin-top: 10px;"></div>
+</div>
+
+  <div class="container">
+ 
+
+    <div class="toggles-row">
+      <div class="toggle-wrapper">
+        <label for="darkModeToggle" onclick="toggleDarkMode()">Dark Mode</label>
+        <input type="checkbox" id="darkModeToggle">
+      </div>
+      <div id="imperialStatus"></div>
+      <div class="toggle-wrapper">
+        <label for="imperialToggle"><span id="imperialToggleLabel">Imperial Mode</span></label>
+
+        <input type="checkbox" id="imperialToggle">
+      </div>
+    </div>
+
+    <h2>Gas Rate Calculator</h2>
+
+    <label id="modeLabel" for="mode">Mode</label>
+    <select id="mode" onchange="toggleMode()">
+      <option value="manual">Manual Entry</option>
+      <option value="timer" selected>Use Timer</option>
+    </select>
+
+    <label for="gasType">Gas Type</label>
+    <select id="gasType">
+      <option value="natural">Natural Gas</option>
+      <option value="lpg">LPG</option>
+    </select>
+
+    <div id="manualDuration">
+      <label for="manualSeconds">Select Duration</label>
+      <select id="manualSeconds">
+        <option value="60" selected>1 Minute</option>
+        <option value="120">2 Minutes</option>
+      </select>
+    </div>
+
+    <div id="timerSection">
+      <label for="duration">Test Duration</label>
+      <select id="duration">
+        <option value="60">1 Minute</option>
+        <option value="120">2 Minutes</option>
+      </select>
+      <button id="startBtn" onclick="startTimer()">Start Timer</button>
+      <button id="pauseBtn" onclick="togglePauseResume()" style="display:none;">Pause</button>
+      <div id="timeLeft">0:00</div>
+    </div>
+
+    <div id="imperialVolumeSection" style="display:none;">
+      <label for="imperialVolume">Volume Used (ft³)</label>
+      <input type="number" id="imperialVolume" step="0.991" value="0.991">
+    </div>
+
+    <div id="meterReadings">
+      <label for="initial">Initial Reading</label>
+      <input type="number" id="initial" step="any" />
+      <label for="final">Final Reading</label>
+      <input type="number" id="final" step="any" />
+    </div>
+
+    <button id="calculateBtn" onclick="calculateRate()">Calculate</button>
+    <button onclick="resetForm()">Reset</button>
+<div id="toast" class="toast"></div>
+    <div id="result" class="results"></div>
+
+    <button onclick="toggleBoilerFinder()">Search G.C Number</button>
+    <div id="boilerFinder" class="boiler-lookup">
+      <!-- ✅ Centered GC input -->
+      <div class="gc-wrapper">
+        <label for="gcNumber" class="gc-label">G.C. Number:</label>
+        <input type="text" id="gcNumber" placeholder="Enter GC number, make or model">
+
+      </div>
+      <div class="suggestions"></div>
+    <div id="boilerResult"></div>
+</div>
+    <!-- 🔓 Subtle Logout Button -->
+<div style="text-align: center; margin-top: 1.5rem;">
+  <button id="logoutBtn" onclick="logout()" style="
+    background: none;
+    color: #8a2be2;
+    border: none;
+    font-size: 0.9rem;
+    font-weight: bold;
+    cursor: pointer;
+    text-decoration: underline;
+  ">
+    Logout
+  </button>
+</div>
+</div> <!-- END of .container -->
+
+
+
+
+
+
+<audio id="alertSound" src="beep.mp3" preload="auto" playsinline></audio>
+<audio id="endBeep" src="end-beep.mp3" preload="auto" playsinline></audio>
+
+
+<script>
+function toggleBoilerFinder() {
+  const section = document.getElementById('boilerFinder');
+  const isVisible = section.style.display === 'block';
+  section.style.display = isVisible ? 'none' : 'block';
+
+  if (!isVisible) {
+    const gcInput = document.getElementById('gcNumber');
+    gcInput.focus();
+    setTimeout(() => gcInput.scrollIntoView({ behavior: 'smooth', block: 'center' }), 200);
+  }
+}
+
+// ✅ Setup fuzzy search using Fuse.js
+let fuse;
+function setupFuzzySearch() {
+  if (!window.boilerData) return;
+ // 🧠 Add virtual combined field "makeModel"
+// 🔁 Build a searchable "allText" field per boiler (GC + Make + Model)
+const enrichedBoilerData = window.boilerData.map(entry => {
+  const make = entry.Make || '';
+  const model = entry.Model || '';
+  const gc = entry["GC Number"] || '';
+  return {
+    ...entry,
+    allText: `${make} ${model} ${gc}`.toLowerCase().replace(/[^\w\s]/g, '')
+  };
+});
+
+fuse = new Fuse(enrichedBoilerData, {
+  keys: ['allText'],
+  threshold: 0.4,
+  ignoreLocation: true,
+  minMatchCharLength: 2,
+  useExtendedSearch: true,     // ✅ Enables token-based matching
+});
+
+
+
+}
+
+// 🔁 Setup fuzzy search after boiler data loads
+document.addEventListener('DOMContentLoaded', () => {
+  if (window.boilerData) setupFuzzySearch();
+  
+});
+
+const gcInput = document.getElementById('gcNumber');
+const suggestionsDiv = document.querySelector('.suggestions');
+
+gcInput.addEventListener('input', function (e) {
+  const query = e.target.value.trim();
+  showSuggestions(query);
+});
+
+document.addEventListener('click', function (e) {
+  if (e.target !== gcInput) {
+    suggestionsDiv.innerHTML = '';
+  }
+});
+
+function showSuggestions(query) {
+  suggestionsDiv.innerHTML = '';
+  if (!query || !fuse) return;
+
+  const trimmed = query.trim().toLowerCase();
+  const digitsOnly = trimmed.replace(/\D/g, '');
+  let results = [];
+
+  const isFullGC = /^\d{7}$/.test(digitsOnly);
+  const isMostlyNumeric = /^[\d\s-]{3,}$/.test(trimmed);
+
+  if (isFullGC) {
+    const match = window.boilerData.find(entry => {
+      const gcRaw = (entry["GC Number"] || '').replace(/\D/g, '');
+      return gcRaw === digitsOnly;
+    });
+    if (match) results = [{ item: match }];
+  } else if (isMostlyNumeric) {
+    results = fuse.search(trimmed).slice(0, 8);
+  } else {
+    const tokens = trimmed
+      .split(/\s+/)
+      .filter(Boolean)
+      .map(token => `'${token}`);
+    const searchQuery = tokens.join(' ');
+    results = fuse.search(searchQuery).slice(0, 8);
+  }
+
+  if (results.length === 0) {
+  suggestionsDiv.innerHTML = `
+    <div style="text-align: center;">
+      <span style="color: red; font-weight: bold;">⚠️No matching boilers found⚠️</span>
+    </div>
+  `;
+
+  // Auto-hide after 3 seconds
+  setTimeout(() => {
+    suggestionsDiv.innerHTML = '';
+  }, 3000);
+
+  return;
+}
+
+  results.forEach(({ item }) => {
+  const rawGC = item["GC Number"].replace(/\D/g, '');
+  const formattedGC = rawGC.length === 7
+    ? `${rawGC.slice(0, 2)}-${rawGC.slice(2, 5)}-${rawGC.slice(5, 7)}`
+    : item["GC Number"];
+
+  const make = item["Make"] || '';
+  const model = item["Model"] || '';
+
+  const div = document.createElement('div');
+  div.innerHTML = `
+    <span class="gc-highlight">${formattedGC}</span> - ${make} ${model}
+  `;
+  div.style.padding = '5px';
+  div.style.cursor = 'pointer';
+  div.addEventListener('click', () => {
+    gcInput.value = formattedGC;
+    suggestionsDiv.innerHTML = '';
+    showBoilerInfo(item);
+    const resultBox = document.getElementById('boilerResult');
+    if (resultBox) {
+      resultBox.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  });
+  suggestionsDiv.appendChild(div);
+});
+
+}
+
+
+
+
+
+</script>
+
+<!-- Firebase SDKs -->
+<script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore-compat.js"></script>
+
+<!-- Your app's script -->
+<script src="script.js"></script>
+
+<!-- Disclaimer -->
+<div style="text-align: center; margin-top: 2rem; margin-bottom: 1rem;">
+  <small style="color: #8a2be2; font-weight: bold;">
+    *This tool is to be used as a guide only and Manufacturer's Instructions should always be referenced*
+  </small>
+</div>
+
+</body>
+</html>
