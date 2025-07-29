@@ -37,19 +37,23 @@ let lastGrossKW = null;
 let lastNetKWMode = null;
 
 function init() {
- const beep = document.getElementById('alertSound');
-const endBeep = document.getElementById('endBeep');
+  const beep = document.getElementById('alertSound');
+  const endBeep = document.getElementById('endBeep');
 
-document.body.addEventListener('click', () => {
-  [beep, endBeep].forEach(audio => {
-    if (audio) {
-      audio.play().then(() => {
-        audio.pause();
-        audio.currentTime = 0;
-      }).catch(() => {});
-    }
-  });
-}, { once: true });
+  document.body.addEventListener('click', () => {
+    [beep, endBeep].forEach(audio => {
+      if (audio) {
+        audio.play().then(() => {
+          audio.pause();
+          audio.currentTime = 0;
+        }).catch(() => {});
+      }
+    });
+  }, { once: true });
+
+  // 🌙 Auto-enable dark mode based on system or saved preference
+ applyInitialDarkModeSetting();
+
 
   document.getElementById('darkModeToggle').addEventListener('change', toggleDarkMode);
   document.getElementById('imperialToggle').addEventListener('change', toggleImperialMode);
@@ -59,32 +63,50 @@ document.body.addEventListener('click', () => {
   setupGCInput();
   toggleMode();
 
- document.getElementById('gcNumber').addEventListener('blur', () => {
-  setTimeout(() => {
-    const input = document.getElementById('gcNumber');
-    const gc = input.value.replace(/\D/g, '');
+  document.getElementById('gcNumber').addEventListener('blur', () => {
+    setTimeout(() => {
+      const input = document.getElementById('gcNumber');
+      const gc = input.value.replace(/\D/g, '');
 
-    if (gc.length === 7) {
-      input.value = `${gc.slice(0, 2)}-${gc.slice(2, 5)}-${gc.slice(5, 7)}`;
-    }
+      if (gc.length === 7) {
+        input.value = `${gc.slice(0, 2)}-${gc.slice(2, 5)}-${gc.slice(5, 7)}`;
+      }
 
-    const boiler = findBoilerByGC(gc);
-    if (boiler) {
-      showBoilerInfo(boiler);
-    } else if (gc.trim() !== '') {
-      showToast('No boiler found for this G.C. number');
-    }
-  }, 200); // Wait for click to register before checking value
-});
+      const boiler = findBoilerByGC(gc);
+      if (boiler) {
+        showBoilerInfo(boiler);
+      } else if (gc.trim() !== '') {
+        showToast('No boiler found for this G.C. number');
+      }
+    }, 200);
+  });
+}
 
+function applyInitialDarkModeSetting() {
+  const savedPref = localStorage.getItem('darkModePref');
+  let isDark;
 
+  if (savedPref === 'on') {
+    isDark = true;
+  } else if (savedPref === 'off') {
+    isDark = false;
+  } else {
+    isDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+  }
 
+  document.getElementById('darkModeToggle').checked = isDark;
+  document.body.classList.toggle('dark-mode', isDark);
 }
 
 function toggleDarkMode() {
-  const darkMode = document.getElementById('darkModeToggle').checked;
-  document.body.classList.toggle('dark-mode', darkMode);
+  const toggle = document.getElementById('darkModeToggle');
+  const isDark = toggle.checked;
+
+  document.body.classList.toggle('dark-mode', isDark);
+  localStorage.setItem('darkModePref', isDark ? 'on' : 'off');
 }
+
+
 
 function toggleImperialMode() {
   imperialMode = document.getElementById('imperialToggle').checked;
@@ -462,69 +484,63 @@ function showBoilerInfo(boiler) {
   const stripBadge = `<span class="tag ${strip === 'yes' ? 'yes' : 'no'}">${strip.charAt(0).toUpperCase() + strip.slice(1)}</span>`;
 
   // Tolerance logic
- let toleranceMessage = '';
-let netClass = '';
-const match = netRange.match(/([\d.]+)[^\d]+([\d.]+)/);
-if (match && lastNetKW !== null) {
-  const min = parseFloat(match[1]);
-  const max = parseFloat(match[2]);
-  if (!isNaN(min) && !isNaN(max)) {
-    const outOfRange = lastNetKW < min || lastNetKW > max;
-    netClass = outOfRange ? 'red' : 'green';
+  let toleranceMessage = '';
+  let netClass = '';
+  const match = netRange.match(/([\d.]+)[^\d]+([\d.]+)/);
+  if (match && lastNetKW !== null) {
+    const min = parseFloat(match[1]);
+    const max = parseFloat(match[2]);
+    if (!isNaN(min) && !isNaN(max)) {
+      const outOfRange = lastNetKW < min || lastNetKW > max;
+      netClass = outOfRange ? 'red' : 'green';
 
-    const messageText = outOfRange
-      ? '⚠️ Outside of manufacturer’s tolerance'
-      : '✅ Within manufacturer’s tolerance';
+      const messageText = outOfRange
+        ? '⚠️ Outside of manufacturer’s tolerance'
+        : '✅ Within manufacturer’s tolerance';
 
-    // ✅ Add to boiler card layout
-    toleranceMessage = `
-      <div class="tolerance-message" style="grid-column: 1 / -1; font-weight: bold; color: ${outOfRange ? 'red' : 'green'};">
-        ${messageText}
-      </div>`;
+      toleranceMessage = `
+        <div class="tolerance-message" style="grid-column: 1 / -1; font-weight: bold; color: ${outOfRange ? 'red' : 'green'};">
+          ${messageText}
+        </div>`;
 
-// ✅ Also add below the #result box (if it's visible)
-const resultBox = document.getElementById('result');
-if (resultBox && resultBox.style.display !== 'none') {
-  // Update the Net Heat Input color in #result box
-  const resultNetKW = document.getElementById('netKW');
-  if (resultNetKW) {
-    resultNetKW.classList.remove('green', 'red');
-    resultNetKW.classList.add(outOfRange ? 'red' : 'green');
+      const resultBox = document.getElementById('result');
+      if (resultBox && resultBox.style.display !== 'none') {
+        const resultNetKW = document.getElementById('netKW');
+        if (resultNetKW) {
+          resultNetKW.classList.remove('green', 'red');
+          resultNetKW.classList.add(outOfRange ? 'red' : 'green');
+        }
+
+        // 🧹 Remove old tolerance message if any
+        const oldMsg = resultBox.querySelector('.tolerance-message');
+        if (oldMsg) oldMsg.remove();
+
+        // ✅ Now add the new one
+        const msg = document.createElement('div');
+        msg.className = 'tolerance-message';
+        msg.style.color = outOfRange ? 'red' : 'green';
+        msg.style.fontWeight = 'bold';
+        msg.style.marginTop = '6px';
+        msg.innerHTML = messageText;
+        resultBox.appendChild(msg);
+      }
+    }
   }
-
- // 🧹 Remove old tolerance message if any
-const oldMsg = resultBox.querySelector('.tolerance-message');
-if (oldMsg) oldMsg.remove();
-
-// ✅ Now add the new one
-const msg = document.createElement('div');
-msg.className = 'tolerance-message';
-msg.style.color = outOfRange ? 'red' : 'green';
-msg.style.fontWeight = 'bold';
-msg.style.marginTop = '6px';
-msg.innerHTML = messageText;
-resultBox.appendChild(msg);
-
-}
-
-  }
-}
-
 
   const html = `
     <div class="boiler-card">
       <div class="boiler-title">${make} ${model}</div>
       <div class="boiler-grid">
         <div>
-        <div class="label">Net Heat Input</div>
+          <div class="label">Net Heat Input</div>
           <div class="value ${netClass}" id="boilerNetKW">${net} kW</div> 
         </div>
         <div>
-        <div class="label">Net Heat Input Range</div>
+          <div class="label">Net Heat Input Range</div>
           <div class="value">${netRange}</div>
         </div>
         <div>
-        <div class="label">Gross Heat Input</div>
+          <div class="label">Gross Heat Input</div>
           <div class="value">${gross} kW</div> 
         </div>
         <div>
@@ -536,11 +552,11 @@ resultBox.appendChild(msg);
           <div class="value">Max: ${maxCO2}%<br>Min: ${minCO2}%</div>
         </div>
         <div>
-         <div class="label">Max Ratio</div>
+          <div class="label">Max Ratio</div>
           <div class="value">${ratio}</div>
         </div>
         <div>
-        <div class="label">Burner Pressure</div>
+          <div class="label">Burner Pressure</div>
           <div class="value">Max: ${maxPressure} mb<br>Min: ${minPressure} mb</div> 
         </div>
         <div>
@@ -555,7 +571,78 @@ resultBox.appendChild(msg);
   document.getElementById('boilerResult').innerHTML = html;
   document.getElementById('boilerResult').scrollIntoView({ behavior: 'smooth', block: 'center' });
 
+  // ✅ Show flue input panel
+  document.getElementById('flueInputs').style.display = 'block';
 }
+
+function validateFlueTest() {
+  const co2 = parseFloat(document.getElementById('inputCO2').value);
+  const co = parseFloat(document.getElementById('inputCO').value);
+  const ratio = parseFloat(document.getElementById('inputRatio').value);
+  const resultBox = document.getElementById('flueValidationResult');
+  const boiler = findBoilerByGC(document.getElementById('gcNumber').value);
+
+  if (!boiler) {
+    resultBox.innerHTML = '<span style="color:red;">⚠️ No boiler selected.</span>';
+    return;
+  }
+
+ const maxCO2Raw = boiler['Max CO2%'] || '';
+const minCO2Raw = boiler['Min CO2%'] || '';
+
+// Extract base and tolerance from string like "9.8(+/-0.5)"
+const extractWithTolerance = (str) => {
+  const match = str.match(/([\d.]+)\s*\(\+\/-([\d.]+)\)/);
+  if (match) {
+    const base = parseFloat(match[1]);
+    const tol = parseFloat(match[2]);
+    return { min: base - tol, max: base + tol };
+  }
+  const fallback = parseFloat(str);
+  return { min: fallback, max: fallback };
+};
+
+const co2Range = extractWithTolerance(maxCO2Raw); // use only maxCO2(+/-) range
+
+  const maxCO = parseFloat(boiler['Max Co (PPM)']);
+  const maxRatio = parseFloat(boiler['Max Ratio']);
+
+  let results = [];
+
+ if (!isNaN(co2)) {
+  if (co2 >= co2Range.min && co2 <= co2Range.max) {
+    results.push(`CO₂ ✅ <span style="color: green; font-weight: bold;">${co2}% OK</span>`);
+  } else {
+    results.push(`CO₂ ⚠️ <span style="color: red; font-weight: bold;">${co2}% OUTSIDE range (${co2Range.min.toFixed(1)}–${co2Range.max.toFixed(1)}%)</span>`);
+  }
+}
+
+
+  if (!isNaN(co) && !isNaN(maxCO)) {
+    if (co <= maxCO) {
+      results.push(`CO ✅ <span style="color: green; font-weight: bold;">${co} ppm OK</span>`);
+    } else {
+      results.push(`CO ⚠️ <span style="color: red; font-weight: bold;">${co} ppm EXCEEDS limit (${maxCO} ppm)</span>`);
+    }
+  }
+
+  if (!isNaN(ratio) && !isNaN(maxRatio)) {
+    if (ratio <= maxRatio) {
+      results.push(`Ratio ✅ <span style="color: green; font-weight: bold;">${ratio} OK</span>`);
+    } else {
+      results.push(`Ratio ⚠️ <span style="color: red; font-weight: bold;">${ratio} EXCEEDS max (${maxRatio})</span>`);
+    }
+  }
+
+  resultBox.innerHTML = results.join('<br>');
+}
+
+
+
+
+ 
+
+
 function showToast(message) {
   const toast = document.getElementById('toast');
   toast.innerHTML = `<span style="color: red; font-weight: bold;">&#9888;</span> ${message} <span style="color: red; font-weight: bold;">&#9888;</span>`;
@@ -571,7 +658,6 @@ if ('serviceWorker' in navigator) {
       .catch(err => console.error('Service Worker registration failed:', err));
   });
 }
-
 
 
 
