@@ -1,4 +1,7 @@
-// ✅ Firebase setup — paste your real values from Firebase here
+
+let isAdmin = false;
+
+let currentGCNumber = null;
 const firebaseConfig = {
    apiKey: "AIzaSyDH8QRh5zUY-sfr6QSQubD_5pRY0LC9ShY",
   authDomain: "gas-rate88.firebaseapp.com",
@@ -16,16 +19,99 @@ let currentSessionId = null;
 
 // ✅ Show login or app depending on user status
 firebase.auth().onAuthStateChanged((user) => {
-  if (user) {
-    // User is logged in
-    document.querySelector('.container').style.display = 'block';
-    document.getElementById('loginScreen').style.display = 'none';
-  } else {
-    // No user logged in
-    document.querySelector('.container').style.display = 'none';
-    document.getElementById('loginScreen').style.display = 'flex';
-  }
+  handleUserAuthState(user);
 });
+
+function handleUserAuthState(user) {
+  const adminButton = document.getElementById('adminBtn');
+  const secretArea = document.getElementById('secretTapArea');
+
+  // ✅ Delay to ensure DOM is ready
+  setTimeout(() => {
+    const adminToggleBtn = document.getElementById('adminToggleBtn');
+
+    if (user) {
+      document.getElementById("loginScreen").style.display = "none";
+      document.querySelector(".container").style.display = "block";
+
+      if (user.email === "lex@fake.com") {
+        if (adminToggleBtn) adminToggleBtn.style.display = "block";
+        if (adminButton) adminButton.style.display = "none";
+
+        let tapCount = 0;
+        let tapTimeout;
+
+    if (secretArea) {
+  let tapCount = 0;
+  let tapTimeout;
+  let lastTapTime = 0;
+
+  secretArea.addEventListener('click', () => {
+    const now = Date.now();
+    const timeSinceLastTap = now - lastTapTime;
+
+    // ✅ Handle double tap to disable admin mode
+    if (isAdmin && timeSinceLastTap < 400) {
+      isAdmin = false;
+      document.body.classList.remove('admin-mode');
+      document.getElementById('boilerResult').innerHTML = ''; // 🧼 clear boiler card
+      showToast("🔒 Admin Mode disabled");
+      return;
+    }
+
+    lastTapTime = now;
+
+    // ✅ Handle 5 taps to enable admin mode
+    tapCount++;
+    clearTimeout(tapTimeout);
+
+    if (tapCount >= 5) {
+      tapCount = 0;
+
+      const pass = prompt("Enter admin password:");
+      if (pass === "admin123") {
+        isAdmin = true;
+        document.body.classList.add('admin-mode');
+        showToast("✅ Admin Mode enabled");
+      } else {
+        showToast("❌ Incorrect password");
+      }
+    }
+
+    tapTimeout = setTimeout(() => {
+      tapCount = 0;
+    }, 1000);
+  });
+}
+
+
+
+      } else {
+        if (adminButton) adminButton.style.display = "none";
+        if (adminToggleBtn) adminToggleBtn.style.display = "none";
+      }
+
+      const logoutBtn = document.getElementById("logoutBtn");
+      if (logoutBtn) {
+        logoutBtn.addEventListener("click", logout);
+      }
+
+    } else {
+      document.getElementById("loginScreen").style.display = "flex";
+      document.querySelector(".container").style.display = "none";
+
+      if (adminButton) adminButton.style.display = "none";
+      if (adminToggleBtn) adminToggleBtn.style.display = "none";
+    }
+  }, 100);
+}
+
+
+
+
+
+
+
 
 let countdown;
 let stopwatchInterval;
@@ -72,12 +158,18 @@ function init() {
         input.value = `${gc.slice(0, 2)}-${gc.slice(2, 5)}-${gc.slice(5, 7)}`;
       }
 
-      const boiler = findBoilerByGC(gc);
-      if (boiler) {
-        showBoilerInfo(boiler);
-      } else if (gc.trim() !== '') {
-        showToast('No boiler found for this G.C. number');
-      }
+     const boiler = findBoilerByGC(gc);
+if (boiler) {
+  showBoilerInfo(boiler);
+} else if (gc.trim() !== '') {
+  // Only show toast if no match AND no search results are visible
+  const resultBox = document.getElementById('boilerResult');
+  const visible = resultBox && resultBox.innerHTML.trim() !== '';
+  if (!visible) {
+    showToast('No boiler found for this G.C. number');
+  }
+}
+
     }, 200);
   });
 }
@@ -336,7 +428,8 @@ function calculateRate() {
       : parseInt(document.getElementById('duration').value);
 
     const gasType = document.getElementById('gasType').value;
-    const calorificValue = gasType === 'natural' ? 10.76 : 25.86;
+    const calorificValue = gasType === 'natural' ? 10.766666666666667 : 25.86111111;
+
 
     const gross = (3600 * volume * calorificValue) / duration;
     const net = gross / 1.11;
@@ -437,55 +530,79 @@ function setupGCInput() {
 
 
 
+let boilerDataLoaded = false;
+
 function loadBoilerData() {
-  fetch('https://raw.githubusercontent.com/lexington1988/gas-rate-unfinished/main/service_info_full.csv')
-    .then(response => {
-      if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-      return response.text();
-    })
-    .then(csvText => {
-      const lines = csvText.trim().split('\n');
-      const headers = lines[0].split(',');
+  const csvUrl = 'https://raw.githubusercontent.com/lexington1988/gas-rate-calculator/main/service_info_full.csv';
 
-      window.boilerData = lines.slice(1).map(line => {
-        const parts = line.split(',');
-        const entry = {};
-        headers.forEach((h, i) => entry[h.trim()] = parts[i]?.trim());
-        return entry;
-      });
 
-      setupFuzzySearch(); // ✅ Now runs only after boilerData is fully ready
-    })
-    .catch(err => console.error('CSV load error:', err));
+  Papa.parse(csvUrl, {
+    download: true,
+    header: true,
+    skipEmptyLines: true,
+    complete: function (results) {
+      window.boilerData = results.data;
+      boilerDataLoaded = true;
+      setupFuzzySearch(); // Rebuild fuzzy search after loading
+    },
+    error: function (err) {
+      console.error("CSV load error:", err);
+      showToast("❌ Failed to load boiler data from CSV");
+    }
+  });
 }
+
+
+
+
 
 
 function findBoilerByGC(gcInput) {
   const formattedGC = gcInput.trim().replace(/-/g, '');
-  return window.boilerData?.find(entry =>
-    entry["GC Number"]?.replace(/-/g, '') === formattedGC
+  const boiler = window.boilerData?.find(entry =>
+    (entry["GC Number"] || '').replace(/-/g, '') === formattedGC
   );
+
+  if (boiler && !boiler.id) {
+    console.warn("❗ Boiler found but missing Firestore ID");
+  }
+
+  return boiler;
 }
 
+// ✅ Ensures values like "31.11" display as "31.11 kW", but avoids duplicates like "31.11 kW kW"
+function appendUnit(value, unit) {
+  if (!value) return '';
+  return value.toLowerCase().includes(unit.toLowerCase()) ? value : `${value} ${unit}`;
+}
+
+
 function showBoilerInfo(boiler) {
+  currentGCNumber = boiler["GC Number"]?.trim();
   const make = boiler.Make?.trim() || '';
   const model = boiler.Model?.trim() || '';
+  console.log('Manual URL:', boiler['Manual']);
+
   const gross = boiler['kW Gross'] || '';
   const net = boiler['kW Net'] || '';
-  const netRange = boiler['Net kW (+5%/-10%)'] || '';
-  const maxCO2 = boiler['Max CO2%'] || '';
-  const minCO2 = boiler['Min CO2%'] || '';
-  const maxCO = boiler['Max Co (PPM)'] || '';
-  const maxPressure = boiler['Max (Burner Pressure Mb)'] || '';
-  const minPressure = boiler['Min (Burner Pressure Mb)'] || '';
-  const ratio = boiler['Max Ratio'] || '';
-  const stripRaw = boiler['Strip Service Required']?.trim().toLowerCase() || '';
-  const strip = stripRaw === 'yes' ? 'yes' : stripRaw || 'no';
-  const stripBadge = `<span class="tag ${strip === 'yes' ? 'yes' : 'no'}">${strip.charAt(0).toUpperCase() + strip.slice(1)}</span>`;
+ const netRange = boiler['Net kW (+5%/-10%)'] || '';
 
-  // Tolerance logic
+  const maxCO2 = boiler['Max CO2%'] || '';
+const minCO2 = boiler['Min CO2%'] || '';
+
+  const maxCO = boiler['Max Co (PPM)'] || '';
+
+  const maxPressure = boiler['Max (Burner Pressure Mb)'] || '';
+const minPressure = boiler['Min (Burner Pressure Mb)'] || '';
+
+  const ratio = boiler['Max_Ratio'] || '';
+ const stripRaw = boiler['Strip Service Required']?.trim().toLowerCase() || '';
+
+  const strip = stripRaw === 'yes' ? 'yes' : stripRaw || 'no';
+
   let toleranceMessage = '';
   let netClass = '';
+
   const match = netRange.match(/([\d.]+)[^\d]+([\d.]+)/);
   if (match && lastNetKW !== null) {
     const min = parseFloat(match[1]);
@@ -493,7 +610,6 @@ function showBoilerInfo(boiler) {
     if (!isNaN(min) && !isNaN(max)) {
       const outOfRange = lastNetKW < min || lastNetKW > max;
       netClass = outOfRange ? 'red' : 'green';
-
       const messageText = outOfRange
         ? '⚠️ Outside of manufacturer’s tolerance'
         : '✅ Within manufacturer’s tolerance';
@@ -511,11 +627,9 @@ function showBoilerInfo(boiler) {
           resultNetKW.classList.add(outOfRange ? 'red' : 'green');
         }
 
-        // 🧹 Remove old tolerance message if any
         const oldMsg = resultBox.querySelector('.tolerance-message');
         if (oldMsg) oldMsg.remove();
 
-        // ✅ Now add the new one
         const msg = document.createElement('div');
         msg.className = 'tolerance-message';
         msg.style.color = outOfRange ? 'red' : 'green';
@@ -527,146 +641,228 @@ function showBoilerInfo(boiler) {
     }
   }
 
+  const field = (label, key, value) => {
+    const inputHTML = isAdmin
+      ? `<input data-key="${key}" value="${value}" style="width:100%;padding:4px;" />`
+      : `<div class="value ${key === 'kW Net' ? netClass : ''}">${value}</div>`;
+    return `<div><div class="label">${label}</div>${inputHTML}</div>`;
+  };
+
   const html = `
     <div class="boiler-card">
-      <div class="boiler-title">${make} ${model}</div>
+ ${isAdmin ? `
+  <div style="display: flex; flex-direction: column; align-items: center; gap: 10px; margin-bottom: 15px;">
+    <div style="display: flex; gap: 10px;">
+      <button onclick="addNewBoiler()" style="background: #6a0dad; color: white; padding: 8px 16px; border-radius: 6px; font-weight: bold;">➕ Add New Boiler</button>
+      <button onclick="deleteBoiler()" style="background: #6a0dad; color: white; padding: 8px 16px; border-radius: 6px; font-weight: bold;">🗑️ Delete Boiler</button>
+    </div>
+    <button onclick="downloadCSV()" style="background: #6a0dad; color: white; padding: 8px 20px; border-radius: 6px; font-weight: bold;">📥 Download CSV</button>
+    <span style="font-size: 0.85rem; color: gray;"></span>
+  </div>
+` : ''}
+
+
+
+
+      ${isAdmin 
+        ? `<div style="display: flex; gap: 10px; margin-bottom: 10px;">
+            ${field('Make', 'Make', make)}
+            ${field('Model', 'Model', model)}
+          </div>`
+        : `<div class="boiler-title">${make} ${model}</div>`}
+
       <div class="boiler-grid">
-        <div>
-          <div class="label">Net Heat Input</div>
-          <div class="value ${netClass}" id="boilerNetKW">${net} kW</div> 
-        </div>
-        <div>
-          <div class="label">Net Heat Input Range</div>
-          <div class="value">${netRange}</div>
-        </div>
-        <div>
-          <div class="label">Gross Heat Input</div>
-          <div class="value">${gross} kW</div> 
-        </div>
-        <div>
-          <div class="label">Max CO</div>
-          <div class="value">${maxCO} ppm</div>
-        </div>
-        <div>
-          <div class="label">CO₂ Range</div>
-          <div class="value">Max: ${maxCO2}%<br>Min: ${minCO2}%</div>
-        </div>
-        <div>
-          <div class="label">Max Ratio</div>
-          <div class="value">${ratio}</div>
-        </div>
-        <div>
-          <div class="label">Burner Pressure</div>
-          <div class="value">Max: ${maxPressure} mb<br>Min: ${minPressure} mb</div> 
-        </div>
-        <div>
-          <div class="label">Strip Service Required</div>
-          <div class="value">${stripBadge}</div>
-        </div>
+        ${field('Net Heat Input', 'kW Net', appendUnit(net, 'kW'))}
+        ${field('Net Heat Input Range', 'Net kW (+5%/-10%)', netRange)}
+        ${field('Gross Heat Input', 'kW Gross', appendUnit(gross, 'kW'))}
+        ${field('Max CO', 'Max Co (PPM)', appendUnit(maxCO, 'ppm'))}
+          ${field('Max Burner Pressure (Mb)', 'Max Burner Pressure (Mb)', appendUnit(maxPressure, 'mb'))}
+  ${field('Min Burner Pressure (Mb)', 'Min Burner Pressure (Mb)', appendUnit(minPressure, 'mb'))}
+
+        ${isAdmin
+  ? `
+    <div style="display: flex; gap: 10px;">
+      ${field('Max CO₂%', 'Max CO2%', maxCO2)}
+      ${field('Min CO₂%', 'Min CO2%', minCO2)}
+    </div>
+  `
+  : `<div><div class="label">CO₂ Range</div><div class="value">Max: ${maxCO2}%<br>Min: ${minCO2}%</div></div>`}
+
+
+       
+
+        ${isAdmin 
+          ? field('Strip Service Required', 'Strip Service Required', strip)
+          : `<div><div class="label">Strip Service Required</div><div class="value"><span class="tag ${strip === 'yes' ? 'yes' : 'no'}">${strip.charAt(0).toUpperCase() + strip.slice(1)}</span></div></div>`}
+
         ${toleranceMessage}
       </div>
+      ${isAdmin ? '<button onclick="saveBoilerEdits()" style="margin-top:10px;">💾 Save Changes</button>' : ''}
+     ${!isAdmin && boiler['Manual']?.trim() ? `<div style="text-align:center; margin-top: 1rem;"><a href="${boiler['Manual'].trim()}" target="_blank" style="color: #8a2be2; font-size: 0.85rem; font-weight: bold; text-decoration: underline;">View Manual</a></div>` : ''}
+
+
     </div>
   `;
 
   document.getElementById('boilerResult').innerHTML = html;
   document.getElementById('boilerResult').scrollIntoView({ behavior: 'smooth', block: 'center' });
-
-  // ✅ Show flue input panel
-  document.getElementById('flueInputs').style.display = 'block';
 }
 
-function validateFlueTest() {
-  const co2 = parseFloat(document.getElementById('inputCO2').value);
-  const co = parseFloat(document.getElementById('inputCO').value);
-  const ratio = parseFloat(document.getElementById('inputRatio').value);
-  const resultBox = document.getElementById('flueValidationResult');
-  const boiler = findBoilerByGC(document.getElementById('gcNumber').value);
 
-  if (!boiler) {
-    resultBox.innerHTML = '<span style="color:red;">⚠️ No boiler selected.</span>';
+function addNewBoiler() {
+  const gc = prompt("Enter new G.C. Number (7 digits):");
+  if (!gc || !/^\d{7}$/.test(gc)) {
+    alert("❌ Invalid G.C. Number. It must be 7 digits.");
     return;
   }
 
- const maxCO2Raw = boiler['Max CO2%'] || '';
-const minCO2Raw = boiler['Min CO2%'] || '';
+  const formattedGC = `${gc.slice(0, 2)}-${gc.slice(2, 5)}-${gc.slice(5, 7)}`;
 
-// Extract base and tolerance from string like "9.8(+/-0.5)"
-const extractWithTolerance = (str) => {
-  const match = str.match(/([\d.]+)\s*\(\+\/-([\d.]+)\)/);
-  if (match) {
-    const base = parseFloat(match[1]);
-    const tol = parseFloat(match[2]);
-    return { min: base - tol, max: base + tol };
+  const exists = window.boilerData?.some(b => 
+    (b["GC Number"] || '').replace(/\D/g, '') === gc
+  );
+  if (exists) {
+    alert("❌ A boiler with this G.C. Number already exists.");
+    return;
   }
-  const fallback = parseFloat(str);
-  return { min: fallback, max: fallback };
-};
 
-const co2Range = extractWithTolerance(maxCO2Raw); // use only maxCO2(+/-) range
+  const newBoiler = {
+    "GC Number": formattedGC,
+    "Make": "",
+    "Model": "",
+    "kW Net": "",
+    "kW Gross": "",
+    "Net_kW_Tolerance": "",
+    "Max_CO2": "",
+    "Min_CO2": "",
+    "Max_CO_PPM": "",
+    "Max_Burner_Pressure": "",
+    "Min_Burner_Pressure": "",
+    "Max_Ratio": "",
+    "Strip_Service": ""
+  };
 
-  const maxCO = parseFloat(boiler['Max Co (PPM)']);
-  const maxRatio = parseFloat(boiler['Max Ratio']);
+  window.boilerData.push(newBoiler);
+  showToast("✅ New boiler added");
+  showBoilerInfo(newBoiler);
+}
 
-  let results = [];
-
- if (!isNaN(co2)) {
-  if (co2 >= co2Range.min && co2 <= co2Range.max) {
-    results.push(`CO₂ ✅ <span style="color: green; font-weight: bold;">${co2}% OK</span>`);
-  } else {
-    results.push(`CO₂ ⚠️ <span style="color: red; font-weight: bold;">${co2}% OUTSIDE range (${co2Range.min.toFixed(1)}–${co2Range.max.toFixed(1)}%)</span>`);
+function deleteBoiler() {
+  if (!currentGCNumber) {
+    alert("❌ No boiler selected.");
+    return;
   }
+
+  const confirmDelete = confirm(`Are you sure you want to delete boiler ${currentGCNumber}?`);
+  if (!confirmDelete) return;
+
+  const gc = currentGCNumber.replace(/-/g, '');
+  window.boilerData = window.boilerData.filter(b => 
+    (b["GC Number"] || '').replace(/\D/g, '') !== gc
+  );
+
+  showToast("🗑️ Boiler deleted");
+  document.getElementById('boilerResult').innerHTML = '';
 }
 
 
-  if (!isNaN(co) && !isNaN(maxCO)) {
-    if (co <= maxCO) {
-      results.push(`CO ✅ <span style="color: green; font-weight: bold;">${co} ppm OK</span>`);
-    } else {
-      results.push(`CO ⚠️ <span style="color: red; font-weight: bold;">${co} ppm EXCEEDS limit (${maxCO} ppm)</span>`);
-    }
-  }
-
-  if (!isNaN(ratio) && !isNaN(maxRatio)) {
-    if (ratio <= maxRatio) {
-      results.push(`Ratio ✅ <span style="color: green; font-weight: bold;">${ratio} OK</span>`);
-    } else {
-      results.push(`Ratio ⚠️ <span style="color: red; font-weight: bold;">${ratio} EXCEEDS max (${maxRatio})</span>`);
-    }
-  }
-
-  resultBox.innerHTML = results.join('<br>');
-}
-
-
-
-
- 
-
+let toastTimeout;
 
 function showToast(message) {
-  const toast = document.getElementById('toast');
-  toast.innerHTML = `<span style="color: red; font-weight: bold;">&#9888;</span> ${message} <span style="color: red; font-weight: bold;">&#9888;</span>`;
+  const toast = document.querySelector('.toast');
+  if (!toast) return;
+
+  clearTimeout(toastTimeout); // clear any pending hides
+  toast.textContent = message;
   toast.classList.add('show');
-  setTimeout(() => {
+
+  toastTimeout = setTimeout(() => {
     toast.classList.remove('show');
   }, 3000);
 }
-if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => {
-    navigator.serviceWorker.register('service-worker.js')
-      .then(() => console.log('✅ Service Worker registered'))
-      .catch(err => console.error('Service Worker registration failed:', err));
-  });
+
+
+
+
+
+
+
+ document.addEventListener("DOMContentLoaded", () => {
+  init();
+
+  // ✅ Fix: attach logout button functionality
+  const logoutBtn = document.getElementById("logoutBtn");
+if (logoutBtn) {
+  logoutBtn.addEventListener("click", logout);
 }
 
+  
+  // Your existing code...
 
 
-document.addEventListener('DOMContentLoaded', () => {
-  init();
-  loadBoilerData();
- 
 
+  const useFirestore = true;
+  if (useFirestore) {
+    loadBoilerData(); // 🔁 Loads from GitHub CSV instead of Firestore
+
+  } else {
+    loadBoilerData(); // ⬅️ Your original CSV fallback function
+  }
+
+  // ✅ Enable Admin-only CSV uploader *after login*
+  firebase.auth().onAuthStateChanged((user) => {
+    if (user && isAdmin) {
+      const uploader = document.getElementById('csvUploader');
+      if (uploader) uploader.style.display = 'block';
+
+      const uploadBtn = document.getElementById('uploadCSVButton');
+      const fileInput = document.getElementById('csvFileInput');
+      const statusDiv = document.getElementById('csvStatus');
+
+      uploadBtn.addEventListener('click', () => {
+        const file = fileInput.files[0];
+        if (!file) {
+          alert("Please select a CSV file first.");
+          return;
+        }
+
+        Papa.parse(file, {
+          header: true,
+          skipEmptyLines: true,
+          complete: async function(results) {
+            const rows = results.data;
+            let success = 0;
+            let failed = 0;
+
+            statusDiv.innerHTML = `Uploading ${rows.length} boilers...`;
+
+            for (const boiler of rows) {
+              const gc = boiler["GC Number"]?.replace(/\D/g, '');
+              if (!gc || gc.length !== 7) {
+                failed++;
+                continue;
+              }
+
+              const formattedGC = `${gc.slice(0, 2)}-${gc.slice(2, 5)}-${gc.slice(5, 7)}`;
+              boiler["GC Number"] = formattedGC;
+
+              try {
+                await db.collection("boiler-data").doc(gc).set(boiler, { merge: true });
+                success++;
+              } catch (err) {
+                console.error("❌ Error uploading:", boiler, err);
+                failed++;
+              }
+            }
+
+            statusDiv.innerHTML = `✅ ${success} uploaded, ❌ ${failed} failed.`;
+          }
+        });
+      });
+    }
+  });
 });
+
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
     navigator.serviceWorker.register('service-worker.js')
@@ -716,6 +912,7 @@ function showUpdateBanner() {
   };
   document.body.appendChild(banner);
 }
+
 function login() {
   const username = document.getElementById('loginUsername').value.trim();
   const password = document.getElementById('loginPassword').value;
@@ -749,7 +946,6 @@ function login() {
     });
 }
 
-
 function logout() {
   const user = firebase.auth().currentUser;
   if (user) {
@@ -763,4 +959,130 @@ function logout() {
     .catch((error) => {
       console.error('Logout error:', error);
     });
+}
+
+
+
+function toggleAdminMode() {
+  if (!isAdmin) {
+    const pass = prompt("Enter admin password:");
+    if (pass === "admin123") {
+      isAdmin = true;
+      document.body.classList.add('admin-mode');
+      showToast("✅ Admin Mode enabled");
+    } else {
+      showToast("❌ Incorrect password");
+    }
+  } else {
+    isAdmin = false;
+    document.body.classList.remove('admin-mode');
+    showToast("🔒 Admin Mode disabled");
+
+    const uploader = document.getElementById('csvUploader');
+    if (uploader) uploader.style.display = 'block';
+
+    const uploadBtn = document.getElementById('uploadCSVButton');
+    const fileInput = document.getElementById('csvFileInput');
+    const statusDiv = document.getElementById('csvStatus');
+
+    uploadBtn.addEventListener('click', () => {
+      const file = fileInput.files[0];
+      if (!file) {
+        alert("Please select a CSV file first.");
+        return;
+      }
+
+      Papa.parse(file, {
+        header: true,
+        skipEmptyLines: true,
+        complete: async function(results) {
+          const rows = results.data;
+          let success = 0;
+          let failed = 0;
+
+          statusDiv.innerHTML = `Uploading ${rows.length} boilers...`;
+
+          for (const boiler of rows) {
+            const gc = boiler["GC Number"]?.replace(/\D/g, '');
+            if (!gc || gc.length !== 7) {
+              failed++;
+              continue;
+            }
+
+            const formattedGC = `${gc.slice(0, 2)}-${gc.slice(2, 5)}-${gc.slice(5, 7)}`;
+            boiler["GC Number"] = formattedGC;
+
+            // Do nothing here, just simulate
+            success++;
+          }
+
+          statusDiv.innerHTML = `✅ ${success} loaded (not saved), ❌ ${failed} invalid.`;
+        }
+      });
+    });
+  }
+}
+
+
+
+function saveBoilerEdits() {
+  const gcRaw = currentGCNumber ? currentGCNumber.replace(/-/g, '') : '';
+  const boilerIndex = window.boilerData.findIndex(entry =>
+    (entry["GC Number"] || '').replace(/\D/g, '') === gcRaw
+  );
+
+  if (boilerIndex === -1) {
+    alert("❌ GC number not found in memory.");
+    return;
+  }
+
+  const inputs = document.querySelectorAll('#boilerResult input[data-key]');
+  const keyMap = {
+  "Make": "Make",
+  "Model": "Model",
+  "kW Net": "kW Net",
+  "kW Gross": "kW Gross",
+  "Net kW (+5%/-10%)": "Net kW (+5%/-10%)",
+  "Max CO₂%": "Max CO2%",
+  "Min CO₂%": "Min CO2%",
+  "Max Co (PPM)": "Max Co (PPM)",
+  "Max Burner Pressure (Mb)": "Max (Burner Pressure Mb)",
+  "Min Burner Pressure (Mb)": "Min (Burner Pressure Mb)",
+  "Max Ratio": "Max Ratio",
+  "Strip Service Required": "Strip Service Required"
+};
+
+
+  inputs.forEach(input => {
+    const rawKey = input.getAttribute('data-key');
+    const safeKey = keyMap[rawKey] || rawKey;
+    let val = input.value.trim();
+
+    val = val.replace(/\bkW\b|\bppm\b|\bmb\b|[%°]/gi, '').trim();
+    if (val.length > 200) val = val.slice(0, 200);
+    val = val.replace(/[<>]/g, '').replace(/[\u0000-\u001F\u007F]/g, '');
+
+    window.boilerData[boilerIndex][safeKey] = val;
+  });
+
+  showToast("✅ Changes saved (in memory)");
+  showBoilerInfo(window.boilerData[boilerIndex]);
+}
+function downloadCSV() {
+  if (!window.boilerData || window.boilerData.length === 0) {
+    showToast("❌ No boiler data to export.");
+    return;
+  }
+
+  const csv = Papa.unparse(window.boilerData);
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const link = document.createElement("a");
+  const url = URL.createObjectURL(blob);
+  link.setAttribute("href", url);
+  link.setAttribute("download", "boiler-data.csv");
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+
+  showToast("📥 CSV downloaded successfully");
 }
